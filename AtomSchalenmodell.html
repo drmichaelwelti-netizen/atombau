@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="de-CH">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Schalenmodell</title>
+<style>
+:root{
+  /* Gleiche Werkbank wie der Lewis-Editor. Bewusst nur Systemschriften und keine externen Dateien:
+     läuft offline und im Safe Exam Browser. */
+  --ground:#e7edef;
+  --surface:#ffffff;
+  --ink:#14191d;
+  --muted:#56636c;
+  --line:#c8d2d8;
+  --accent:#0a6a70;
+  --accent-ink:#ffffff;
+  --accent-tint:#d3ecec;
+  --danger:#a3262d;
+  --ok:#1d7a3a;
+  --font-ui:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,"Helvetica Neue",Arial,sans-serif;
+  --font-mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+[hidden]{display:none !important}
+html,body{height:100%;margin:0}
+body{background:var(--ground);color:var(--ink);font-family:var(--font-ui);font-size:15px;line-height:1.35;-webkit-text-size-adjust:100%;overflow:hidden}
+#app{display:flex;flex-direction:column;height:100%}
+button{font:inherit;color:inherit}
+code{font-family:var(--font-mono);font-size:.92em;background:#eef3f4;padding:1px 5px;border-radius:4px}
+
+/* Werkzeugleiste */
+.bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 12px;background:var(--surface);border-bottom:1px solid var(--line)}
+.brand{font-weight:650;white-space:nowrap;margin-right:2px;line-height:1.1}
+.brand small{display:block;font-weight:400;color:var(--muted);font-size:11px}
+.btn{min-height:44px;min-width:44px;padding:0 12px;border:1px solid var(--line);background:var(--surface);border-radius:10px;display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;white-space:nowrap;user-select:none;-webkit-user-select:none}
+.btn:hover{border-color:#94a7b2}
+.btn:active{background:#eef3f4}
+.btn:disabled{opacity:.38;cursor:default}
+.btn:focus-visible,.chip:focus-visible,.sb:focus-visible,summary:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.btn.primary:active{background:#08575c}
+.btn.icon{padding:0}
+.btn svg.ic{width:20px;height:20px;flex:none;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:12px;padding:3px;background:#f1f5f6;gap:3px}
+.seg .btn{border:none;background:transparent;min-height:42px;border-radius:9px}
+.seg .btn[aria-checked="true"]{background:var(--accent);color:var(--accent-ink)}
+.grp{display:inline-flex;gap:4px}
+.spacer{flex:1}
+@media (max-width:860px){.brand{display:none}}
+@media (max-width:700px){.lbl-opt{display:none}}
+
+/* Teilchen-Symbole */
+.pc{fill:#fff;stroke:var(--ink);stroke-width:1.7}
+.ps{stroke:var(--ink);stroke-width:2;stroke-linecap:round}
+.psym{display:block;flex:none}
+.isym{display:inline-block;vertical-align:-4px}
+.isym .psym{display:inline-block}
+
+/* Bild */
+#main{flex:1;min-height:0;display:flex;flex-direction:column}
+#stage{flex:1;min-height:0;display:flex;flex-direction:column;background:#fff}
+#tools{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;padding:7px 12px;border-bottom:1px solid var(--line);background:var(--surface)}
+#tools .lab{font-size:13.5px;color:var(--muted)}
+#tools .seg .btn{min-width:50px;padding:0 10px}
+#canvas{position:relative;flex:1;min-height:0}
+#svg{position:absolute;left:0;top:0;width:100%;height:calc(100% - 30px);display:block;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.ring{fill:none;stroke:#7a8c96;stroke-width:1.6}
+.ring.off{stroke:#c5d0d6;stroke-width:1.3;stroke-dasharray:5 6}
+.ring.hov{stroke:var(--accent);stroke-width:3}
+.kern-bg{fill:#eef3f4;stroke:none}
+.kern-bg.hov{fill:var(--accent-tint)}
+.kern-empty{fill:#f6f8f9;stroke:#9aabb4;stroke-width:1.4;stroke-dasharray:4 4}
+.kern-empty.hov{stroke:var(--accent);fill:var(--accent-tint)}
+.kern-lbl{font-family:var(--font-ui);font-size:10.5px;font-weight:500;fill:var(--muted)}
+.slbl{font-family:var(--font-ui);font-size:13px;font-weight:650;fill:var(--muted);paint-order:stroke;stroke:#fff;stroke-width:5px;stroke-linejoin:round}
+.slbl.off{fill:#aab7be}
+#hint{position:absolute;left:12px;right:12px;bottom:7px;font-size:13px;color:var(--muted);pointer-events:none;text-align:center;line-height:1.3}
+#hint b{color:var(--ink)}
+#hint.big{font-size:15px;bottom:auto;top:16px;color:var(--ink);background:rgba(255,255,255,.9);padding:6px 10px;border-radius:10px}
+#toast{position:absolute;top:12px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:10px;font-size:14px;max-width:calc(100% - 24px);width:max-content;text-align:center;opacity:0;pointer-events:none;transition:opacity .2s;z-index:5}
+#toast.on{opacity:1}
+#toast.good{background:var(--ok)}
+#toast.bad{background:var(--danger)}
+@media (prefers-reduced-motion:reduce){#toast{transition:none}}
+
+/* Eingabe */
+#panel{flex:none;background:var(--surface);border-top:1px solid var(--line);overflow:auto;-webkit-overflow-scrolling:touch;max-height:52%;padding:10px 14px 18px}
+.pin{max-width:560px;margin:0 auto}
+.ptitle{font-size:12.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:650;margin:4px 0 2px}
+.pnote{font-size:13px;color:var(--muted);margin:0 0 8px}
+#shellChips{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:14px}
+.chip{width:46px;height:46px;border:1.5px solid var(--line);border-radius:50%;background:#fff;font-weight:650;font-size:17px;cursor:pointer;padding:0;touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+.chip:hover{border-color:#94a7b2}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+#matrix{display:grid;grid-template-columns:auto repeat(3,minmax(0,1fr));gap:7px 6px;align-items:center}
+.mh{display:flex;justify-content:center;padding-bottom:1px}
+.ml{font-size:14.5px;font-weight:600;white-space:nowrap;padding-right:4px}
+.stp{display:flex;align-items:stretch;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff;min-width:0}
+.stp:focus-within{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-tint)}
+.sb{flex:0 0 34px;min-height:44px;border:none;background:#f1f5f6;font-size:21px;font-weight:600;line-height:1;cursor:pointer;padding:0;touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+.sb:active{background:#d9e4e7}
+.sb:disabled{color:#bcc7cc;cursor:default;background:#f6f8f9}
+.stp input{flex:1 1 0;width:0;min-width:0;border:none;border-left:1px solid #e1e8eb;border-right:1px solid #e1e8eb;text-align:center;font-family:var(--font-mono);font-size:17px;font-weight:600;color:var(--ink);padding:0;background:#fff;border-radius:0;-webkit-appearance:none;appearance:none}
+.stp input:focus{outline:none;background:#f2fafa}
+.stp.flash input{animation:flash .8s ease-out}
+@keyframes flash{from{background:var(--accent-tint)}to{background:#fff}}
+@media (prefers-reduced-motion:reduce){.stp.flash input{animation:none}}
+@media (min-width:980px){
+  #main{flex-direction:row}
+  #panel{width:clamp(440px,42vw,540px);max-height:none;border-top:none;border-left:1px solid var(--line);padding:14px 14px 18px}
+  .pin{max-width:none}
+}
+
+/* Dialoge */
+.overlay{position:fixed;inset:0;background:rgba(14,26,32,.4);display:none;align-items:center;justify-content:center;padding:16px;z-index:20}
+.overlay.open{display:flex}
+.panel{background:var(--surface);border-radius:16px;width:100%;max-width:700px;max-height:100%;overflow:auto;-webkit-overflow-scrolling:touch;padding:20px 22px 22px;box-shadow:0 18px 50px rgba(10,30,40,.3)}
+.panel.narrow{max-width:460px}
+.phead{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.phead h2{margin:0;font-size:20px;flex:1;text-wrap:balance}
+.panel h3{font-size:15px;margin:18px 0 6px;color:var(--accent)}
+.panel p,.panel li{line-height:1.5;max-width:66ch}
+.panel ul,.panel ol{padding-left:20px;margin:6px 0}
+.panel li{margin:3px 0}
+.kbd{font-family:var(--font-mono);font-size:12px;border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:0 5px;background:#f6f8f9}
+details{margin-top:18px;border-top:1px solid var(--line);padding-top:10px}
+summary{cursor:pointer;font-weight:600;min-height:36px;display:flex;align-items:center}
+table{border-collapse:collapse;width:100%;font-size:14px}
+td,th{border-bottom:1px solid #e3e9ec;padding:6px 6px;text-align:left;vertical-align:top}
+th{color:var(--muted);font-weight:600}
+.codebox{font-family:var(--font-mono);font-size:34px;font-weight:600;letter-spacing:.14em;text-align:center;width:100%;border:2px solid var(--accent);border-radius:12px;padding:12px 8px;color:var(--ink);background:#f4fafa}
+.longbox{font-family:var(--font-mono);font-size:14px;width:100%;min-height:64px;border:1px solid var(--line);border-radius:10px;padding:8px;resize:vertical}
+.row{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;align-items:center}
+.muted{color:var(--muted);font-size:14px}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="bar">
+    <div class="brand">Schalenmodell<small>Atombau</small></div>
+    <div class="grp">
+      <button class="btn icon" id="undoBtn" aria-label="Rückgängig" title="Rückgängig"><svg class="ic" viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+      <button class="btn icon" id="redoBtn" aria-label="Wiederholen" title="Wiederholen"><svg class="ic" viewBox="0 0 24 24"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
+    </div>
+    <div class="spacer"></div>
+    <button class="btn" id="clearBtn" title="Neu beginnen"><svg class="ic" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M12 11v6M9 14h6"/></svg><span class="lbl-opt">Neu</span></button>
+    <button class="btn" id="helpBtn" title="Anleitung"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 1 1 3.6 2.3c-.8.4-1.2 1-1.2 1.9v.4"/><path d="M12 17.2v.1"/></svg><span class="lbl-opt">Anleitung</span></button>
+    <button class="btn" id="checkBtn" hidden><svg class="ic" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Überprüfen</button>
+    <button class="btn primary" id="codeBtn"><svg class="ic" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg>Antwortcode</button>
+  </header>
+
+  <div id="main">
+    <section id="stage" aria-label="Bild">
+      <div id="tools">
+        <span class="lab">Ins Bild tippen:</span>
+        <div class="seg" role="radiogroup" aria-label="Werkzeug für das Bild">
+          <button class="btn tool" role="radio" data-tool="0" aria-checked="true" aria-label="Teilchen mit Plus setzen"></button>
+          <button class="btn tool" role="radio" data-tool="1" aria-checked="false" aria-label="Teilchen ohne Zeichen setzen"></button>
+          <button class="btn tool" role="radio" data-tool="2" aria-checked="false" aria-label="Teilchen mit Minus setzen"></button>
+          <button class="btn tool" role="radio" data-tool="x" aria-checked="false" aria-label="Teilchen entfernen"><svg class="ic" viewBox="0 0 24 24"><path d="M15.5 4.5l4 4L10 18H6l-2-2z"/><path d="M11.5 8.5l4 4M8 20h12"/></svg>Entfernen</button>
+        </div>
+      </div>
+      <div id="canvas">
+        <svg id="svg" viewBox="-130 -130 260 260" role="img" aria-label="Bild des Atoms"><g id="view"></g></svg>
+        <div id="hint"></div>
+        <div id="toast" role="status" aria-live="polite"></div>
+      </div>
+    </section>
+
+    <aside id="panel" aria-label="Eingabe">
+      <div class="pin">
+        <div class="ptitle">Schalen</div>
+        <p class="pnote">Tippe auf eine Nummer, um die Schale ein- oder auszuschalten.</p>
+        <div id="shellChips" role="group" aria-label="Schalen ein- und ausschalten"></div>
+        <div class="ptitle">Anzahl Teilchen</div>
+        <p class="pnote">Im Kern und in jeder eingeschalteten Schale. Mit − und + oder Zahl eintippen.</p>
+        <div id="matrix"></div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<!-- Anleitung -->
+<div class="overlay" id="dlgHelp" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+  <div class="panel">
+    <div class="phead"><h2 id="helpTitle">Anleitung</h2><button class="btn" data-close>Schliessen</button></div>
+    <h3>1 · Schalen einschalten</h3>
+    <p>Tippe bei «Schalen» auf die Nummern der Schalen, die dein Atom braucht. Eine eingeschaltete Schale erscheint im Bild und als Zeile in der Tabelle. Tippst du nochmals darauf, ist sie wieder ausgeschaltet. Ihre Teilchen werden dabei entfernt.</p>
+    <h3>2 · Teilchen in der Tabelle eintragen</h3>
+    <ul>
+      <li>Jede Zeile ist ein Ort: der <b>Kern</b> oder eine <b>Schale</b>.</li>
+      <li>Jede Spalte ist eine Teilchenart: <span class="isym" data-t="0"></span> <span class="isym" data-t="1"></span> <span class="isym" data-t="2"></span></li>
+      <li>Mit <b>−</b> und <b>+</b> änderst du die Anzahl um 1. Hältst du die Taste gedrückt, zählt sie schnell weiter. Du kannst die Zahl auch direkt ins Feld tippen.</li>
+    </ul>
+    <h3>3 · Teilchen im Bild setzen</h3>
+    <ul>
+      <li>Wähle über dem Bild eine Teilchenart und tippe auf den Kern oder auf eine Schale. Jeder Tipp setzt ein Teilchen dazu.</li>
+      <li>Mit <b>«Entfernen»</b> tippst du auf ein Teilchen im Bild, um es wegzunehmen.</li>
+      <li>Die Teilchen ordnen sich von selbst an. Es zählt nur, wie viele an welchem Ort sind.</li>
+    </ul>
+    <h3>4 · Korrigieren</h3>
+    <p><b>Rückgängig</b> und <b>Wiederholen</b> mit den Pfeilen oben. Tasten: <span class="kbd">Ctrl/⌘</span>+<span class="kbd">Z</span> und <span class="kbd">Ctrl</span>+<span class="kbd">Y</span> bzw. <span class="kbd">⌘</span>+<span class="kbd">⇧</span>+<span class="kbd">Z</span>. <b>«Neu»</b> setzt alles zurück.</p>
+    <h3>5 · Abgeben</h3>
+    <p>Bist du fertig, tippe auf <b>«Antwortcode»</b>. Trage den 8-stelligen Code in isTest ins Antwortfeld ein, mit «Kopieren» und Einfügen oder durch Abtippen. Jede Änderung ergibt einen neuen Code. Erstelle den Code deshalb erst ganz am Schluss.</p>
+    <p class="muted">Deine Eingabe bleibt auf diesem Gerät gespeichert, auch wenn die Seite neu lädt. Die App sendet keine Daten.</p>
+
+    <details id="teacher">
+      <summary>Für Lehrpersonen</summary>
+      <h3>Lösungscode erstellen</h3>
+      <p>Baue das richtige Atom oder Ion und öffne «Antwortcode». Hinterlege diesen Code in isTest als richtige Antwort, z.B. im Fragetyp «Einfacher Text». Sind mehrere Lösungen richtig (z.B. verschiedene Isotope), trägst du jeden Code als Alternative ein.</p>
+      <p>Der Code hängt nur davon ab, welche Schalen eingeschaltet sind und wie viele Teilchen jeder Art im Kern und in jeder Schale liegen. Wie die Teilchen im Bild angeordnet sind, spielt keine Rolle. Eine zusätzlich eingeschaltete, leere Schale ergibt einen anderen Code. Erstelle Lösungscodes mit derselben Version der App und demselben Prüfungsstichwort wie in der Prüfung (Code-Version <span id="cv"></span>).</p>
+      <h3>Eingabe einer Schülerin ansehen</h3>
+      <p>Mit der Einstellung <code>abgabe=zeichnung</code> oder <code>abgabe=beide</code> erhalten die Lernenden zusätzlich einen lesbaren Zeichnungscode (für eine «Offene Frage»), z.B. <code>SM1/K=6,6,0;1=0,0,2;2=0,0,4</code>. «K» ist der Kern, die Ziffern davor sind die eingeschalteten Schalen. Die drei Zahlen stehen immer in der Reihenfolge <span class="isym" data-t="0"></span>, <span class="isym" data-t="1"></span>, <span class="isym" data-t="2"></span>. Füge den Code hier ein, um die Eingabe als Bild zu sehen:</p>
+      <textarea class="longbox" id="loadArea" placeholder="SM1/…" aria-label="Zeichnungscode einfügen"></textarea>
+      <div class="row"><button class="btn" id="loadBtn">Eingabe laden</button><span class="muted" id="loadMsg"></span></div>
+      <h3>Einstellungen über die Adresse</h3>
+      <p class="muted">Beispiel: <code>…/schalenmodell/?id=a1&amp;pruefung=nov26</code>. Die gleichen Werte lassen sich oben im Quelltext im Block «EINSTELLUNGEN» festlegen (nötig beim Einbetten als Code, z.B. in Google Sites).</p>
+      <table>
+        <tr><th>Parameter</th><th>Wirkung</th></tr>
+        <tr><td><code>id</code></td><td>Eindeutiger Name der Aufgabe. Nötig, wenn eine Prüfung mehrere Schalenmodell-Aufgaben enthält, sonst teilen sie sich den Speicher.</td></tr>
+        <tr><td><code>abgabe</code></td><td><code>code</code> (Standard), <code>zeichnung</code> oder <code>beide</code>.</td></tr>
+        <tr><td><code>loesung</code></td><td>Übungsmodus: Lösungscode(s), mit Komma getrennt. Zeigt den Knopf «Überprüfen».</td></tr>
+        <tr><td><code>pruefung</code></td><td>Prüfungsmodus mit selbst gewähltem Stichwort, z.B. <code>pruefung=nov26</code>. Kein «Überprüfen» und keine Lehrpersonen-Funktionen. Die Codes unterscheiden sich von allen Übungscodes. Lösungscodes deshalb mit derselben Adresse erstellen.</td></tr>
+        <tr><td><code>schalen</code></td><td>Wie viele Schalen man einschalten kann, <code>1</code> bis <code>7</code> (Standard <code>7</code>). Beeinflusst die Codes nicht.</td></tr>
+      </table>
+    </details>
+  </div>
+</div>
+
+<!-- Antwortcode -->
+<div class="overlay" id="dlgCode" role="dialog" aria-modal="true" aria-labelledby="codeTitle">
+  <div class="panel narrow">
+    <div class="phead"><h2 id="codeTitle">Antwortcode</h2><button class="btn" data-close>Schliessen</button></div>
+    <div id="codeBody"></div>
+  </div>
+</div>
+
+<!-- Bestätigen -->
+<div class="overlay" id="dlgConfirm" role="dialog" aria-modal="true" aria-labelledby="confTitle">
+  <div class="panel narrow">
+    <h2 id="confTitle" style="margin:0 0 8px;font-size:20px">Alles zurücksetzen?</h2>
+    <p class="muted">Alle Teilchen werden entfernt und alle Schalen ausgeschaltet. Mit «Rückgängig» kannst du es wiederherstellen.</p>
+    <div class="row"><button class="btn" data-close>Abbrechen</button><button class="btn primary" id="confOk">Zurücksetzen</button></div>
+  </div>
+</div>
+
+<script>
+(function(){
+'use strict';
+
+/* ============================================================
+   EINSTELLUNGEN FÜR LEHRPERSONEN
+   Werte hier ändern oder über die Adresse setzen, z.B.
+   index.html?id=a1&pruefung=nov26
+   ============================================================ */
+var CONFIG = {
+  id: '',           // eindeutiger Name je Aufgabe (bei mehreren Aufgaben in einer Prüfung nötig)
+  abgabe: 'code',   // 'code' = kurzer Antwortcode, 'zeichnung' = lesbarer Zeichnungscode, 'beide'
+  loesung: '',      // Übungsmodus: Lösungscode(s), mit Komma getrennt -> Knopf «Überprüfen»
+  pruefung: '',     // Prüfungsmodus: eigenes Stichwort, z.B. 'nov26'. Kein «Überprüfen», keine Lehrpersonen-Funktionen,
+                    // eigene Codes (Lösungscodes mit demselben Stichwort erstellen!)
+  schalen: 7        // wie viele Schalen man einschalten kann (1–7); beeinflusst die Codes nicht
+};
+/* ============================================================ */
+
+try {
+  var q = new URLSearchParams(location.search);
+  Object.keys(CONFIG).forEach(function(k){ if (q.has(k)) CONFIG[k] = q.get(k); });
+} catch (e) {}
+
+function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
+
+var CODE_VERSION = 1;
+var EXAM_KEY = String(CONFIG.pruefung || '').trim();
+var NSHELL = 7;                                          // Schalen 1–7
+var MAX_SHELLS = clamp(parseInt(CONFIG.schalen, 10) || NSHELL, 1, NSHELL);
+var MAX = 200;                                           // höchstens so viele Teilchen einer Art an einem Ort
+var TYPES = [0, 1, 2];                                   // 0 = mit Plus, 1 = ohne Zeichen, 2 = mit Minus
+var TYPE_ARIA = ['Teilchen mit Plus', 'Teilchen ohne Zeichen', 'Teilchen mit Minus'];
+
+/* Zeichengrössen in Bildeinheiten */
+var PR = 11;                 // Radius eines Teilchens
+var PD = 2 * PR + 1.5;       // Abstand der Teilchen im Kern
+var GAP = 40;                // Abstand Kernrand – 1. Schale
+var SP = 38;                 // Abstand zwischen zwei Schalen
+var PITCH = 2 * PR + 6;      // Platz pro Teilchen auf einer Schale
+var EMPTY_K = 21;            // Radius des leeren Kerns
+
+/* ---------- Zustand ---------- */
+// reg[0] = Kern, reg[1..7] = Schalen; jeweils [Plus, ohne, Minus]. on[k] = Schale k eingeschaltet.
+var S = { reg: [], on: [], tool: 0, hover: null };
+function blank(){
+  var reg = [], on = [];
+  for (var i = 0; i <= NSHELL; i++) { reg.push([0, 0, 0]); on.push(i === 0); }
+  return { reg: reg, on: on };
+}
+function setState(d){ S.reg = d.reg; S.on = d.on; }
+setState(blank());
+
+var $ = function(id){ return document.getElementById(id); };
+var svg = $('svg'), viewG = $('view');
+
+function sum3(c){ return c[0] + c[1] + c[2]; }
+function highestOn(st){ st = st || S; for (var k = NSHELL; k >= 1; k--) if (st.on[k]) return k; return 0; }
+function isEmpty(st){
+  st = st || S;
+  for (var k = 0; k <= NSHELL; k++) { if (k && st.on[k]) return false; if (sum3(st.reg[k])) return false; }
+  return true;
+}
+function regionName(r){ return r === 0 ? 'Kern' : 'Schale ' + r; }
+
+/* ---------- Verlauf ---------- */
+var undoStack = [], redoStack = [], pending = null;
+function snapshot(){ return JSON.stringify({ reg: S.reg, on: S.on }); }
+function validState(d){
+  if (!d || !Array.isArray(d.reg) || !Array.isArray(d.on) || d.reg.length !== NSHELL + 1 || d.on.length !== NSHELL + 1) return null;
+  var out = blank();
+  for (var k = 0; k <= NSHELL; k++) {
+    out.on[k] = k === 0 ? true : !!d.on[k];
+    var c = d.reg[k];
+    if (!Array.isArray(c) || c.length !== 3) return null;
+    out.reg[k] = out.on[k] ? c.map(function(v){ return clamp(v | 0, 0, MAX); }) : [0, 0, 0];
+  }
+  return out;
+}
+function restore(str){ var d = validState(JSON.parse(str)); if (d) setState(d); }
+function beginAction(){ if (pending !== null) endAction(); pending = snapshot(); }
+function endAction(){
+  if (pending === null) return;
+  var now = snapshot();
+  if (now !== pending) { undoStack.push(pending); if (undoStack.length > 300) undoStack.shift(); redoStack = []; }
+  pending = null;
+}
+function act(fn){ beginAction(); fn(); endAction(); changed(); }
+function undo(){ endAction(); if (!undoStack.length) return; redoStack.push(snapshot()); restore(undoStack.pop()); changed(); }
+function redo(){ endAction(); if (!redoStack.length) return; undoStack.push(snapshot()); restore(redoStack.pop()); changed(); }
+
+/* ---------- Speichern auf dem Gerät ---------- */
+var STORE_KEY = 'schalenmodell:v1:' + location.pathname + location.search + '|' + CONFIG.id + '|' + EXAM_KEY;
+var saveTimer = null;
+function save(){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(function(){ try { localStorage.setItem(STORE_KEY, snapshot()); } catch (e) {} }, 250);
+}
+function loadSaved(){
+  try {
+    var d = validState(JSON.parse(localStorage.getItem(STORE_KEY) || 'null'));
+    if (d) { setState(d); return true; }
+  } catch (e) {}
+  return false;
+}
+
+/* ---------- Bearbeiten ---------- */
+function toggleShell(k){
+  var had = S.on[k] && sum3(S.reg[k]) > 0;
+  act(function(){
+    if (S.on[k]) { S.on[k] = false; S.reg[k] = [0, 0, 0]; }
+    else S.on[k] = true;
+  });
+  if (had) toast('Schale ' + k + ' ist ausgeschaltet. Ihre Teilchen sind entfernt.');
+}
+function step(r, t, d){
+  var v = S.reg[r][t] + d;
+  if (v < 0 || v > MAX) return false;
+  S.reg[r][t] = v;
+  changed();
+  return true;
+}
+
+/* ---------- Anordnung im Bild ---------- */
+function f1(n){ return Math.round(n * 10) / 10; }
+function rad(d){ return d * Math.PI / 180; }
+function angDiff(a, b){ var d = Math.abs(a - b) % 360; return d > 180 ? 360 - d : d; }
+
+// Dichteste Kugelpackung: Gitterpunkte nach Abstand vom Zentrum sortiert (für den Kern).
+var HEX = (function(){
+  var pts = [], m = 30, h = Math.sqrt(3) / 2;
+  for (var j = -m; j <= m; j++) for (var i = -m; i <= m; i++) {
+    var x = i + j / 2, y = j * h, d = Math.hypot(x, y);
+    if (d > m * h) continue;
+    pts.push({ x:x, y:y, d:Math.round(d * 1e4) / 1e4, a:Math.round(((Math.atan2(y, x) * 180 / Math.PI) + 450) % 360 * 1e4) / 1e4 });
+  }
+  pts.sort(function(p, q){ return p.d - q.d || p.a - q.a; });
+  return pts;
+})();
+function mulberry32(a){
+  return function(){
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    var t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+// Teilchenarten gemischt, aber bei gleicher Anzahl immer gleich angeordnet.
+function typeList(c, r){
+  var arr = [], i;
+  c.forEach(function(n, t){ for (i = 0; i < n; i++) arr.push(t); });
+  var rnd = mulberry32((r * 1000003 + c[0] * 7919 + c[1] * 104729 + c[2] * 1299709) >>> 0);
+  for (i = arr.length - 1; i > 0; i--) { var j = Math.floor(rnd() * (i + 1)), tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp; }
+  return arr;
+}
+// Schalennummer dort, wo sie keine Teilchen verdeckt, möglichst rechts oben.
+function labelAngle(r, n){
+  var best = -40, bestScore = -Infinity;
+  for (var a = -180; a < 180; a += 5) {
+    var minD = 180;
+    for (var j = 0; j < n; j++) minD = Math.min(minD, angDiff(a, -90 + j * 360 / n));
+    var arc = n ? rad(minD) * r : 999;
+    var score = Math.min(arc, 26) * 100 - angDiff(a, -40);
+    if (score > bestScore) { bestScore = score; best = a; }
+  }
+  return best;
+}
+var LAST = null;
+function layout(){
+  var out = { parts: [], rings: [] }, i, k;
+  var c0 = S.reg[0], n0 = sum3(c0);
+  if (n0) {
+    var types = typeList(c0, 0), pts = [], cx = 0, cy = 0, Rn = 0;
+    for (i = 0; i < n0; i++) { pts.push({ x: HEX[i].x * PD, y: HEX[i].y * PD }); cx += pts[i].x; cy += pts[i].y; }
+    cx /= n0; cy /= n0;
+    for (i = 0; i < n0; i++) {
+      var p = { x: pts[i].x - cx, y: pts[i].y - cy, r: 0, t: types[i] };
+      out.parts.push(p);
+      Rn = Math.max(Rn, Math.hypot(p.x, p.y));
+    }
+    out.Rn = Rn + PR;
+  } else out.Rn = EMPTY_K;
+  out.n0 = n0;
+  var H = highestOn(), prev = out.Rn;
+  for (k = 1; k <= H; k++) {
+    var c = S.reg[k], n = S.on[k] ? sum3(c) : 0;
+    var r = Math.max(prev + (k === 1 ? GAP : SP), n * PITCH / (2 * Math.PI));
+    if (n) {
+      var tl = typeList(c, k);
+      for (var j = 0; j < n; j++) { var a = rad(-90 + j * 360 / n); out.parts.push({ x: r * Math.cos(a), y: r * Math.sin(a), r: k, t: tl[j] }); }
+    }
+    out.rings.push({ k: k, r: r, on: S.on[k], la: labelAngle(r, n) });
+    prev = r;
+  }
+  out.H = H;
+  out.R = Math.max(130, prev + PR + 18);
+  return out;
+}
+
+/* ---------- Darstellung ---------- */
+function symSVG(t, size){
+  return '<svg class="psym" viewBox="-12 -12 24 24" width="' + size + '" height="' + size + '" aria-hidden="true" focusable="false">' +
+    '<circle class="pc" r="10"/>' +
+    (t !== 1 ? '<line class="ps" x1="-5.2" y1="0" x2="5.2" y2="0"/>' : '') +
+    (t === 0 ? '<line class="ps" x1="0" y1="-5.2" x2="0" y2="5.2"/>' : '') + '</svg>';
+}
+function particleSVG(p){
+  var x = f1(p.x), y = f1(p.y), h = PR * 0.5;
+  var s = '<circle class="pc" cx="' + x + '" cy="' + y + '" r="' + PR + '"/>';
+  if (p.t !== 1) s += '<line class="ps" x1="' + f1(p.x - h) + '" y1="' + y + '" x2="' + f1(p.x + h) + '" y2="' + y + '"/>';
+  if (p.t === 0) s += '<line class="ps" x1="' + x + '" y1="' + f1(p.y - h) + '" x2="' + x + '" y2="' + f1(p.y + h) + '"/>';
+  return s;
+}
+function render(){
+  var L = LAST = layout(), out = [], hv = S.hover;
+  svg.setAttribute('viewBox', [-L.R, -L.R, 2 * L.R, 2 * L.R].map(f1).join(' '));
+  if (L.n0) out.push('<circle class="kern-bg' + (hv === 0 ? ' hov' : '') + '" r="' + f1(L.Rn + 6) + '"/>');
+  else out.push('<circle class="kern-empty' + (hv === 0 ? ' hov' : '') + '" r="' + EMPTY_K + '"/><text class="kern-lbl" dy="0.35em" text-anchor="middle">Kern</text>');
+  L.rings.forEach(function(g){ out.push('<circle class="ring' + (g.on ? '' : ' off') + (hv === g.k ? ' hov' : '') + '" r="' + f1(g.r) + '"/>'); });
+  var ls = Math.max(1, L.R / 230), lstyle = ' style="font-size:' + f1(13 * ls) + 'px;stroke-width:' + f1(5 * ls) + 'px"';
+  L.rings.forEach(function(g){
+    var a = rad(g.la);
+    out.push('<text class="slbl' + (g.on ? '' : ' off') + '"' + lstyle + ' x="' + f1(g.r * Math.cos(a)) + '" y="' + f1(g.r * Math.sin(a)) + '" dy="0.35em" text-anchor="middle">' + g.k + '</text>');
+  });
+  L.parts.forEach(function(p){ out.push(particleSVG(p)); });
+  viewG.innerHTML = out.join('');
+}
+
+/* ---------- Oberfläche ---------- */
+var chipsKey = '', matrixKey = '';
+function buildChips(){
+  var n = MAX_SHELLS;
+  for (var k = n + 1; k <= NSHELL; k++) if (S.on[k]) n = k;
+  if (chipsKey === String(n)) return;
+  chipsKey = String(n);
+  var box = $('shellChips');
+  box.innerHTML = '';
+  for (var i = 1; i <= n; i++) (function(k){
+    var b = document.createElement('button');
+    b.className = 'chip'; b.textContent = k;
+    b.setAttribute('aria-label', 'Schale ' + k);
+    b.setAttribute('aria-pressed', 'false');
+    b.setAttribute('data-k', k);
+    b.addEventListener('click', function(){ toggleShell(k); });
+    box.appendChild(b);
+  })(i);
+}
+
+var hold = null;
+function stopHold(){
+  if (!hold) return;
+  clearTimeout(hold.timer); clearInterval(hold.rep);
+  hold = null;
+  endAction(); updateUI();
+}
+window.addEventListener('pointerup', stopHold);
+window.addEventListener('pointercancel', stopHold);
+window.addEventListener('blur', stopHold);
+
+function bindStepper(btn, r, t, d){
+  btn.addEventListener('pointerdown', function(e){
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    e.preventDefault();
+    stopHold();
+    beginAction();
+    if (!step(r, t, d)) { endAction(); return; }
+    hold = { timer: setTimeout(function(){
+      if (!hold) return;
+      hold.rep = setInterval(function(){ if (!step(r, t, d)) stopHold(); }, 70);
+    }, 420), rep: null };
+  });
+  btn.addEventListener('pointerleave', function(e){ if (e.pointerType !== 'mouse' || e.buttons) stopHold(); });
+  btn.addEventListener('click', function(e){
+    if (e.detail !== 0) return;            // Finger/Maus wurden schon bei pointerdown gezählt; hier nur Tastatur
+    act(function(){ var v = S.reg[r][t] + d; if (v >= 0 && v <= MAX) S.reg[r][t] = v; });
+  });
+}
+function bindInput(inp, r, t){
+  inp.addEventListener('focus', function(){ setTimeout(function(){ try { inp.setSelectionRange(0, inp.value.length); } catch (e) {} }, 0); });
+  inp.addEventListener('input', function(){
+    if (pending === null) beginAction();
+    var digits = inp.value.replace(/\D+/g, '').slice(0, 4);
+    var v = digits === '' ? 0 : parseInt(digits, 10);
+    if (v > MAX) { v = MAX; digits = String(MAX); toast('Höchstens ' + MAX + ' Teilchen einer Art pro Ort.'); }
+    if (inp.value !== digits) inp.value = digits;
+    S.reg[r][t] = v;
+    render(); save(); updateUI();
+  });
+  inp.addEventListener('blur', function(){ endAction(); updateUI(); });
+  inp.addEventListener('keydown', function(e){
+    if (e.key === 'Enter') { inp.blur(); return; }
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { e.preventDefault(); act(function(){ S.reg[r][t] = clamp(S.reg[r][t] + (e.key === 'ArrowUp' ? 1 : -1), 0, MAX); }); }
+  });
+}
+function buildMatrix(){
+  var rows = [0];
+  for (var k = 1; k <= NSHELL; k++) if (S.on[k]) rows.push(k);
+  var key = rows.join(',');
+  if (key === matrixKey) return;
+  matrixKey = key;
+  var m = $('matrix');
+  m.innerHTML = '';
+  var corner = document.createElement('div');
+  m.appendChild(corner);
+  TYPES.forEach(function(t){
+    var h = document.createElement('div');
+    h.className = 'mh'; h.innerHTML = symSVG(t, 28);
+    m.appendChild(h);
+  });
+  rows.forEach(function(r){
+    var lab = document.createElement('div');
+    lab.className = 'ml'; lab.textContent = regionName(r);
+    m.appendChild(lab);
+    TYPES.forEach(function(t){
+      var cell = document.createElement('div');
+      cell.className = 'stp'; cell.id = 'cell-' + r + '-' + t;
+      var name = regionName(r) + ', ' + TYPE_ARIA[t];
+      cell.innerHTML = '<button class="sb" data-r="' + r + '" data-t="' + t + '" data-d="-1" aria-label="' + name + ': eins weniger">−</button>' +
+        '<input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" autocorrect="off" spellcheck="false" maxlength="4" data-r="' + r + '" data-t="' + t + '" aria-label="' + name + ': Anzahl">' +
+        '<button class="sb" data-r="' + r + '" data-t="' + t + '" data-d="1" aria-label="' + name + ': eins mehr">+</button>';
+      m.appendChild(cell);
+      var bs = cell.querySelectorAll('.sb');
+      bindStepper(bs[0], r, t, -1);
+      bindStepper(bs[1], r, t, 1);
+      bindInput(cell.querySelector('input'), r, t);
+    });
+  });
+}
+function flashCell(r, t){
+  var c = $('cell-' + r + '-' + t);
+  if (!c) return;
+  c.classList.remove('flash'); void c.offsetWidth; c.classList.add('flash');
+}
+
+function updateUI(){
+  $('undoBtn').disabled = !undoStack.length && !(pending !== null && pending !== snapshot());
+  $('redoBtn').disabled = !redoStack.length;
+  document.querySelectorAll('#tools .tool').forEach(function(b){ b.setAttribute('aria-checked', String(b.getAttribute('data-tool') === String(S.tool))); });
+  buildChips();
+  document.querySelectorAll('#shellChips .chip').forEach(function(b){ b.setAttribute('aria-pressed', String(!!S.on[+b.getAttribute('data-k')])); });
+  buildMatrix();
+  var active = document.activeElement;
+  document.querySelectorAll('#matrix input').forEach(function(inp){
+    var v = S.reg[+inp.getAttribute('data-r')][+inp.getAttribute('data-t')];
+    if (inp !== active || (parseInt(inp.value || '0', 10) !== v)) inp.value = String(v);
+  });
+  document.querySelectorAll('#matrix .sb').forEach(function(b){
+    var v = S.reg[+b.getAttribute('data-r')][+b.getAttribute('data-t')];
+    b.disabled = +b.getAttribute('data-d') < 0 ? v <= 0 : v >= MAX;
+  });
+  var h = $('hint');
+  if (isEmpty()) {
+    h.className = 'big';
+    h.innerHTML = 'Schalte bei <b>«Schalen»</b> die Schalen ein und trage die Teilchen in der Tabelle ein. Oder wähle oben eine Teilchenart und tippe auf den Kern oder eine Schale.';
+  } else {
+    h.className = '';
+    h.innerHTML = S.tool === 'x' ? 'Tippe auf ein Teilchen, um es zu <b>entfernen</b>.' : 'Tippe auf den <b>Kern</b> oder eine <b>Schale</b>: ein Teilchen dazu.';
+  }
+}
+function changed(){ render(); updateUI(); save(); }
+
+/* ---------- Tippen ins Bild ---------- */
+function toWorld(cx, cy){
+  var m = svg.getScreenCTM();
+  if (!m) return { x: 0, y: 0 };
+  var p = svg.createSVGPoint(); p.x = cx; p.y = cy;
+  p = p.matrixTransform(m.inverse());
+  return { x: p.x, y: p.y };
+}
+function slotAt(w){
+  var L = LAST, d = Math.hypot(w.x, w.y), H = L.H, radii = [L.Rn];
+  L.rings.forEach(function(g){ radii.push(g.r); });
+  if (!H) return d <= L.Rn + GAP * 0.75 ? { r: 0 } : { none: true };
+  if (d <= (radii[0] + radii[1]) / 2) return { r: 0 };
+  for (var k = 1; k <= H; k++) {
+    var lo = (radii[k - 1] + radii[k]) / 2, hi = k < H ? (radii[k] + radii[k + 1]) / 2 : radii[k] + SP / 2 + 4;
+    if (d > lo && d <= hi) return S.on[k] ? { r: k } : { off: k };
+  }
+  return { none: true };
+}
+function particleAt(w){
+  var m = svg.getScreenCTM(), sc = m ? m.a : 1, lim = PR + 8 / sc, best = null, bd = Infinity;
+  LAST.parts.forEach(function(p){ var d = Math.hypot(p.x - w.x, p.y - w.y); if (d < lim && d < bd) { best = p; bd = d; } });
+  return best;
+}
+function tapAt(cx, cy){
+  var w = toWorld(cx, cy);
+  if (S.tool === 'x') {
+    var p = particleAt(w);
+    if (p) { act(function(){ S.reg[p.r][p.t] = Math.max(0, S.reg[p.r][p.t] - 1); }); flashCell(p.r, p.t); }
+    else toast('Tippe direkt auf ein Teilchen, um es zu entfernen.');
+    return;
+  }
+  var s = slotAt(w), t = S.tool;
+  if (s.r !== undefined) {
+    if (S.reg[s.r][t] >= MAX) { toast('Höchstens ' + MAX + ' Teilchen einer Art pro Ort.'); return; }
+    act(function(){ S.reg[s.r][t]++; });
+    flashCell(s.r, t);
+  } else if (s.off) toast('Schale ' + s.off + ' ist ausgeschaltet. Schalte sie bei «Schalen» ein.');
+  else toast(highestOn() ? 'Hier ist keine Schale. Weitere Schalen schaltest du bei «Schalen» ein.' : 'Hier ist keine Schale. Schalte sie zuerst bei «Schalen» ein.');
+}
+var down = null;
+svg.addEventListener('pointerdown', function(e){
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  down = { id: e.pointerId, x: e.clientX, y: e.clientY };
+});
+svg.addEventListener('pointerup', function(e){
+  if (!down || e.pointerId !== down.id) return;
+  var moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
+  down = null;
+  if (moved <= 12) tapAt(e.clientX, e.clientY);
+});
+svg.addEventListener('pointercancel', function(){ down = null; });
+svg.addEventListener('pointermove', function(e){
+  if (e.pointerType !== 'mouse' || !LAST) return;
+  var w = toWorld(e.clientX, e.clientY), hv = null;
+  if (S.tool === 'x') { svg.style.cursor = particleAt(w) ? 'pointer' : 'default'; }
+  else { var s = slotAt(w); if (s.r !== undefined) hv = s.r; svg.style.cursor = hv === null ? 'default' : 'copy'; }
+  if (hv !== S.hover) { S.hover = hv; render(); }
+});
+svg.addEventListener('pointerleave', function(){ if (S.hover !== null) { S.hover = null; render(); } });
+svg.addEventListener('contextmenu', function(e){ e.preventDefault(); });
+
+/* ---------- Antwortcode ---------- */
+function regionsDesc(st){
+  var parts = ['K=' + st.reg[0].join(',')];
+  for (var k = 1; k <= NSHELL; k++) if (st.on[k]) parts.push(k + '=' + st.reg[k].join(','));
+  return parts.join(';');
+}
+function canonicalDescription(st){
+  st = st || S;
+  return 'SM' + CODE_VERSION + (EXAM_KEY ? '|k=' + EXAM_KEY : '') + '|' + regionsDesc(st);
+}
+function hash64(str){
+  var h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+  for (var i = 0; i < str.length; i++) {
+    var ch = str.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507); h1 ^= Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507); h2 ^= Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return [h1 >>> 0, h2 >>> 0];
+}
+var ALPHA = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+function answerCode(st){
+  st = st || S;
+  if (isEmpty(st)) return '';
+  var h = hash64(canonicalDescription(st)), s = '';
+  for (var k = 0; k < 6; k++) s += ALPHA[(h[0] >>> (5 * k)) & 31];
+  s += ALPHA[((h[0] >>> 30) | ((h[1] & 7) << 2)) & 31];
+  s += ALPHA[(h[1] >>> 3) & 31];
+  return s;
+}
+function drawingCode(st){ return 'SM1/' + regionsDesc(st || S); }
+function parseDrawingCode(str){
+  var s = String(str).replace(/\s+/g, '');
+  var m = s.match(/^SM1\/(.+)$/i);
+  if (!m) throw new Error('Das ist kein Zeichnungscode. Er beginnt mit «SM1/».');
+  var d = blank(), seen = {};
+  m[1].split(';').forEach(function(part){
+    if (!part) return;
+    var mm = part.match(/^(K|[1-7])=(\d{1,3}),(\d{1,3}),(\d{1,3})$/i);
+    if (!mm) throw new Error('Der Code ist beschädigt: «' + part + '»');
+    var r = /^k$/i.test(mm[1]) ? 0 : +mm[1];
+    if (seen[r]) throw new Error('Der Code ist beschädigt: «' + part + '» kommt doppelt vor.');
+    seen[r] = true;
+    d.on[r] = true;
+    d.reg[r] = [+mm[2], +mm[3], +mm[4]].map(function(v){ return clamp(v, 0, MAX); });
+  });
+  if (!seen[0]) throw new Error('Der Code ist beschädigt: Der Kern «K=…» fehlt.');
+  return d;
+}
+
+/* ---------- Dialoge ---------- */
+var openDlg = null, lastFocus = null;
+function openDialog(id){
+  if (document.activeElement && document.activeElement.blur && document.activeElement.tagName === 'INPUT') document.activeElement.blur();
+  endAction();
+  lastFocus = document.activeElement;
+  openDlg = $(id); openDlg.classList.add('open');
+  var f = openDlg.querySelector('[data-close]') || openDlg.querySelector('button');
+  if (f) f.focus();
+}
+function closeDialog(){
+  if (!openDlg) return;
+  openDlg.classList.remove('open'); openDlg = null;
+  if (lastFocus && lastFocus.focus) lastFocus.focus();
+}
+document.querySelectorAll('.overlay').forEach(function(o){
+  o.addEventListener('click', function(e){ if (e.target === o || e.target.hasAttribute('data-close')) closeDialog(); });
+});
+
+var toastTimer = null;
+function toast(msg, kind){
+  var t = $('toast');
+  t.textContent = msg; t.className = 'on' + (kind ? ' ' + kind : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function(){ t.className = ''; }, 3800);
+}
+function copyText(text, input){
+  var done = function(ok){ toast(ok ? 'Kopiert. Jetzt in isTest ins Antwortfeld einfügen.' : 'Kopieren geht hier nicht. Bitte den Code abtippen.'); };
+  var fallback = function(){
+    try {
+      if (input) { input.focus(); input.select(); input.setSelectionRange(0, 9999); done(document.execCommand('copy')); return; }
+    } catch (e) {}
+    done(false);
+  };
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(function(){ done(true); }, fallback);
+    else fallback();
+  } catch (e) { fallback(); }
+}
+function showCode(){
+  var body = $('codeBody');
+  if (isEmpty()) {
+    body.innerHTML = '<p>Du hast noch nichts eingegeben.</p>';
+    openDialog('dlgCode'); return;
+  }
+  var code = answerCode(), mode = CONFIG.abgabe, html = '';
+  if (mode !== 'zeichnung') {
+    html += '<p>Trage diesen Code in isTest ins Antwortfeld ein:</p>' +
+      '<input class="codebox" id="codeOut" readonly value="' + code + '" aria-label="Antwortcode">' +
+      '<div class="row"><button class="btn primary" id="copyCode">Kopieren</button></div>' +
+      '<p class="muted">Der Code gehört genau zu dieser Eingabe. Änderst du danach etwas, ändert sich auch der Code.</p>' +
+      (EXAM_KEY ? '<p class="muted">Prüfungsmodus ist aktiv.</p>' : '');
+  }
+  if (mode === 'zeichnung' || mode === 'beide') {
+    var dc = drawingCode();
+    html += '<p>' + (mode === 'beide' ? 'Falls verlangt, zusätzlich diesen Zeichnungscode einfügen:' : 'Kopiere diesen Zeichnungscode in isTest ins Antwortfeld:') + '</p>' +
+      '<textarea class="longbox" id="drawOut" readonly aria-label="Zeichnungscode">' + dc + '</textarea>' +
+      '<div class="row"><button class="btn' + (mode === 'zeichnung' ? ' primary' : '') + '" id="copyDraw">Zeichnungscode kopieren</button></div>' +
+      (mode === 'zeichnung' && EXAM_KEY ? '<p class="muted">Prüfungsmodus ist aktiv.</p>' : '');
+  }
+  body.innerHTML = html;
+  if ($('copyCode')) $('copyCode').addEventListener('click', function(){ copyText(code, $('codeOut')); });
+  if ($('copyDraw')) $('copyDraw').addEventListener('click', function(){ copyText(drawingCode(), $('drawOut')); });
+  openDialog('dlgCode');
+}
+var solutions = EXAM_KEY ? [] : String(CONFIG.loesung || '').toUpperCase().split(/[\s,;]+/).filter(Boolean);
+function check(){
+  endAction();
+  if (isEmpty()) { toast('Baue zuerst ein Atom.'); return; }
+  if (solutions.indexOf(answerCode()) >= 0) toast('Richtig! Dein Atom stimmt.', 'good');
+  else toast('Noch nicht richtig. Kontrolliere die Schalen und die Anzahl der Teilchen im Kern und in jeder Schale.', 'bad');
+}
+
+/* ---------- Knöpfe ---------- */
+document.querySelectorAll('#tools .tool').forEach(function(b){
+  var v = b.getAttribute('data-tool');
+  if (v !== 'x') b.innerHTML = symSVG(+v, 26);
+  b.addEventListener('click', function(){ S.tool = v === 'x' ? 'x' : +v; S.hover = null; render(); updateUI(); });
+});
+document.querySelectorAll('.isym').forEach(function(s){ s.innerHTML = symSVG(+s.getAttribute('data-t'), 18); });
+$('undoBtn').addEventListener('click', undo);
+$('redoBtn').addEventListener('click', redo);
+$('clearBtn').addEventListener('click', function(){ endAction(); if (!isEmpty()) openDialog('dlgConfirm'); });
+$('confOk').addEventListener('click', function(){ act(function(){ setState(blank()); }); closeDialog(); });
+$('helpBtn').addEventListener('click', function(){ openDialog('dlgHelp'); });
+$('codeBtn').addEventListener('click', showCode);
+$('checkBtn').addEventListener('click', check);
+$('loadBtn').addEventListener('click', function(){
+  try {
+    var d = parseDrawingCode($('loadArea').value);
+    act(function(){ setState(d); });
+    $('loadMsg').textContent = 'Geladen.';
+    closeDialog();
+  } catch (e) { $('loadMsg').textContent = e.message; }
+});
+
+/* ---------- Tastatur ---------- */
+document.addEventListener('keydown', function(e){
+  var tag = (e.target && e.target.tagName) || '';
+  if (tag === 'TEXTAREA' || tag === 'INPUT') { if (e.key === 'Escape') { if (openDlg) closeDialog(); else e.target.blur(); } return; }
+  if (e.key === 'Escape') { closeDialog(); return; }
+  if (openDlg) return;
+  var mod = e.ctrlKey || e.metaKey;
+  if (mod && (e.key === 'z' || e.key === 'Z')) { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
+  if (mod && (e.key === 'y' || e.key === 'Y')) { e.preventDefault(); redo(); return; }
+});
+
+/* ---------- Start ---------- */
+$('cv').textContent = CODE_VERSION;
+if (solutions.length) $('checkBtn').hidden = false;
+if (EXAM_KEY) $('teacher').hidden = true;
+loadSaved();
+render();
+updateUI();
+
+// Für automatische Tests
+window.Schalenmodell = { state: S, answerCode: answerCode, drawingCode: drawingCode, parseDrawingCode: parseDrawingCode, canonicalDescription: canonicalDescription };
+})();
+</script>
+</body>
+</html>
