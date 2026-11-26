@@ -380,7 +380,7 @@ var HEX = (function(){
   for (var j = -m; j <= m; j++) for (var i = -m; i <= m; i++) {
     var x = i + j / 2, y = j * h, d = Math.hypot(x, y);
     if (d > m * h) continue;
-    pts.push({ x:x, y:y, d:Math.round(d * 1e4) / 1e4, a:Math.round(((Math.atan2(y, x) * 180 / Math.PI) + 450) % 360 * 1e4) / 1e4 });
+    pts.push({ x:x, y:y, i:i, j:j, d:Math.round(d * 1e4) / 1e4, a:Math.round(((Math.atan2(y, x) * 180 / Math.PI) + 450) % 360 * 1e4) / 1e4 });
   }
   pts.sort(function(p, q){ return p.d - q.d || p.a - q.a; });
   return pts;
@@ -401,6 +401,87 @@ function typeList(c, r){
   for (i = arr.length - 1; i > 0; i--) { var j = Math.floor(rnd() * (i + 1)), tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp; }
   return arr;
 }
+// Kern: zuerst zufällig gemischt, dann werden Klumpen aufgelöst. Teilchen mit Zeichen (Plus, Minus) haben danach
+// höchstens Tc gleichartige Nachbarn, Teilchen ohne Zeichen höchstens Tn, und keine drei gleichartigen liegen
+// in einer geraden Reihe. Wo das schon stimmt, bleibt die Zufallsmischung: so sieht der Kern nicht geordnet aus.
+// Bei gleicher Anzahl immer gleich angeordnet.
+var NB6 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, -1], [-1, 1]];   // je zwei gegenüberliegende Richtungen
+var KERN_CACHE = {}, KERN_CACHE_N = 0;
+function nucleusTypes(c){
+  var key = c.join(',');
+  if (KERN_CACHE[key]) return KERN_CACHE[key];
+  var N = sum3(c), types = typeList(c, 0), k, m;
+  if ((c[0] ? 1 : 0) + (c[1] ? 1 : 0) + (c[2] ? 1 : 0) < 2 || N < 3) return types;
+  var pos = {}, nb = [], dir = [], miss = [];
+  for (k = 0; k < N; k++) pos[HEX[k].i + ',' + HEX[k].j] = k;
+  for (k = 0; k < N; k++) {
+    var a = [], d6 = [];
+    for (m = 0; m < 6; m++) {
+      var q = pos[(HEX[k].i + NB6[m][0]) + ',' + (HEX[k].j + NB6[m][1])];
+      d6.push(q === undefined ? -1 : q);
+      if (q !== undefined) a.push(q);
+    }
+    nb.push(a); dir.push(d6); miss.push(6 - a.length);
+  }
+  var f = (c[0] + c[2]) / N;                          // Anteil der Teilchen mit Zeichen
+  var Tc = Math.max(1, Math.round(6 * f) - 1), Tn = Math.max(1, Math.round(6 * (1 - f)));
+  function charged(t){ return t !== 1; }
+  function cost(p){
+    // am Rand zählen fehlende Nachbarn mit dem Durchschnitt, damit nichts an den Rand wandert
+    var ch = charged(types[p]), s = miss[p] * (ch ? f : 1 - f), r;
+    for (r = 0; r < nb[p].length; r++) if (charged(types[nb[p][r]]) === ch) s += 1;
+    var over = s - (ch ? Tc : Tn), cc = over > 0 ? over * over * (ch ? 2 : 1) : 0, d = dir[p];
+    for (r = 0; r < 6; r += 2) {
+      if (d[r] >= 0 && d[r + 1] >= 0 && charged(types[d[r]]) === ch && charged(types[d[r + 1]]) === ch) cc += ch ? 1.5 : 0.6;
+    }
+    return cc;
+  }
+  var near = [];                                      // Tauschpartner in der Nähe (bis 3 Teilchen weit)
+  for (k = 0; k < N; k++) {
+    var l = [];
+    for (var di = -3; di <= 3; di++) for (var dj = -3; dj <= 3; dj++) {
+      if (!di && !dj) continue;
+      var q2 = pos[(HEX[k].i + di) + ',' + (HEX[k].j + dj)];
+      if (q2 !== undefined && Math.hypot(HEX[q2].x - HEX[k].x, HEX[q2].y - HEX[k].y) <= 3.01) l.push(q2);
+    }
+    near.push(l);
+  }
+  var seen = new Int32Array(N), stamp = 0;
+  function swap(p, q){ var t = types[p]; types[p] = types[q]; types[q] = t; }
+  function swapDelta(p, q){
+    stamp++;
+    var list = [p, q].concat(nb[p], nb[q]), uniq = [], before = 0, after = 0, r, x;
+    for (r = 0; r < list.length; r++) { x = list[r]; if (seen[x] !== stamp) { seen[x] = stamp; uniq.push(x); before += cost(x); } }
+    swap(p, q);
+    for (r = 0; r < uniq.length; r++) after += cost(uniq[r]);
+    swap(p, q);
+    return after - before;
+  }
+  // Deterministisch abkühlen, vor allem dort tauschen, wo es klumpt
+  var rnd = mulberry32((c[0] * 7919 + c[1] * 104729 + c[2] * 1299709 + 99) >>> 0);
+  var iters = Math.min(200 * N, 20000), T0 = 1, T1 = 0.05, p, q3, it, dd, T;
+  for (it = 0; it < iters; it++) {
+    p = Math.floor(rnd() * N); q3 = near[p][Math.floor(rnd() * near[p].length)];
+    if (q3 === undefined || charged(types[p]) === charged(types[q3])) continue;
+    if (!cost(p) && !cost(q3) && rnd() < 0.7) continue;
+    dd = swapDelta(p, q3); T = T0 * Math.pow(T1 / T0, it / iters);
+    if (dd < 0 || (dd === 0 && rnd() < 0.3) || (dd > 0 && rnd() < Math.exp(-dd / T))) swap(p, q3);
+  }
+  // Zum Schluss nur noch Verbesserungen
+  var improved = true, pass = 0;
+  while (improved && pass < 30) {
+    improved = false; pass++;
+    for (p = 0; p < N; p++) {
+      if (!cost(p)) continue;
+      for (m = 0; m < near[p].length; m++) {
+        q3 = near[p][m];
+        if (charged(types[p]) !== charged(types[q3]) && swapDelta(p, q3) < -1e-9) { swap(p, q3); improved = true; break; }
+      }
+    }
+  }
+  if (++KERN_CACHE_N > 500) { KERN_CACHE = {}; KERN_CACHE_N = 1; }
+  return (KERN_CACHE[key] = types);
+}
 // Schalennummer dort, wo sie keine Teilchen verdeckt, möglichst rechts oben.
 function labelAngle(r, n){
   var best = -40, bestScore = -Infinity;
@@ -418,7 +499,7 @@ function layout(){
   var out = { parts: [], rings: [] }, i, k;
   var c0 = S.reg[0], n0 = sum3(c0);
   if (n0) {
-    var types = typeList(c0, 0), pts = [], cx = 0, cy = 0, Rn = 0;
+    var types = nucleusTypes(c0), pts = [], cx = 0, cy = 0, Rn = 0;
     for (i = 0; i < n0; i++) { pts.push({ x: HEX[i].x * PD, y: HEX[i].y * PD }); cx += pts[i].x; cy += pts[i].y; }
     cx /= n0; cy /= n0;
     for (i = 0; i < n0; i++) {
